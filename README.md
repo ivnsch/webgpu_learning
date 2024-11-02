@@ -1,1 +1,1 @@
-This is a starter template for [Learn Next.js](https://nextjs.org/learn).
+Based on https://github.com/amengede/webgpu-for-beginners/tree/main
