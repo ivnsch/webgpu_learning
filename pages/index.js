@@ -1,7 +1,7 @@
 import Head from "next/head";
 import styles from "../styles/Home.module.css";
 import { useEffect, useRef, useState } from "react";
-import { init } from "./init";
+import { Renderer } from "./Renderer";
 
 export default function Home() {
   const [gpuSupported, setGpuSupported] = useState(false);
@@ -10,7 +10,8 @@ export default function Home() {
   useEffect(() => {
     setGpuSupported(!!navigator.gpu);
     const nested = async () => {
-      await init(canvasRef.current);
+      const renderer = new Renderer(canvasRef.current);
+      await renderer.Initialize();
     };
     nested();
   }, []);
