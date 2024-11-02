@@ -1,4 +1,5 @@
 import shader from "./shaders/shaders.wgsl";
+import { TriangleMesh } from "./triangle_mesh";
 
 export const init = async (canvas: HTMLCanvasElement) => {
   //adapter: wrapper around (physical) GPU.
@@ -19,6 +20,8 @@ export const init = async (canvas: HTMLCanvasElement) => {
     alphaMode: "opaque",
   });
 
+  const triangleMesh = new TriangleMesh(device);
+
   const bindGroupLayout = device.createBindGroupLayout({
     entries: [],
   });
@@ -38,6 +41,7 @@ export const init = async (canvas: HTMLCanvasElement) => {
         code: shader,
       }),
       entryPoint: "vs_main",
+      buffers: [triangleMesh.bufferLayout],
     },
 
     fragment: {
@@ -76,6 +80,7 @@ export const init = async (canvas: HTMLCanvasElement) => {
   });
   renderpass.setPipeline(pipeline);
   renderpass.setBindGroup(0, bindGroup);
+  renderpass.setVertexBuffer(0, triangleMesh.buffer);
   renderpass.draw(3, 1, 0, 0);
   renderpass.end();
 
