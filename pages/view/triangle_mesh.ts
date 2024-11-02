@@ -3,34 +3,32 @@ export class TriangleMesh {
   bufferLayout: GPUVertexBufferLayout;
 
   constructor(device: GPUDevice) {
-    // x y r g b
-    // prettier-ignore
+    // x y z u v
     const vertices: Float32Array = new Float32Array([
-      0.0, 0.0, 0.5, 1.0, 0.0, 0.0, 
-      0.0, -0.5, -0.5, 0.0, 1.0, 0.0, 
-      0.0, 0.5, -0.5, 0.0, 0.0, 1.0,
+      0.0, 0.0, 0.5, 0.5, 0.0, 0.0, -0.5, -0.5, 0.0, 1.0, 0.0, 0.5, -0.5, 1.0,
+      1.0,
     ]);
 
     const usage: GPUBufferUsageFlags =
       GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST;
+    //VERTEX: the buffer can be used as a vertex buffer
+    //COPY_DST: data can be copied to the buffer
 
     const descriptor: GPUBufferDescriptor = {
       size: vertices.byteLength,
       usage: usage,
-      mappedAtCreation: true,
+      mappedAtCreation: true, // similar to HOST_VISIBLE, allows buffer to be written by the CPU
     };
 
     this.buffer = device.createBuffer(descriptor);
 
+    //Buffer has been created, now load in the vertices
     new Float32Array(this.buffer.getMappedRange()).set(vertices);
     this.buffer.unmap();
 
-    // per-line buffer layout
-    // numbers are float32 = 4 bytes
-    // 24 bytes (float32*6)
-    // 3 float32 for position and 3 for color (with 8 bytes offset (3*float32 for position))
+    //now define the buffer layout
     this.bufferLayout = {
-      arrayStride: 24,
+      arrayStride: 20,
       attributes: [
         {
           shaderLocation: 0,
@@ -39,7 +37,7 @@ export class TriangleMesh {
         },
         {
           shaderLocation: 1,
-          format: "float32x3",
+          format: "float32x2",
           offset: 12,
         },
       ],
