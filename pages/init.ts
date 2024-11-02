@@ -4,7 +4,6 @@ export const init = async (canvas: HTMLCanvasElement) => {
   //adapter: wrapper around (physical) GPU.
   //Describes features and limits
   const adapter: GPUAdapter = <GPUAdapter>await navigator.gpu?.requestAdapter();
-  console.log("!!" + adapter);
 
   //device: wrapper around GPU functionality
   //Function calls are made through the device
