@@ -2,6 +2,7 @@ import Head from "next/head";
 import styles from "../../styles/Home.module.css";
 import { useEffect, useRef, useState } from "react";
 import { Renderer } from "./renderer";
+import { Scene } from "./scene";
 
 export default function Home() {
   const [gpuSupported, setGpuSupported] = useState(false);
@@ -9,7 +10,8 @@ export default function Home() {
 
   useEffect(() => {
     const nested = async () => {
-      const renderer = new Renderer(canvasRef.current);
+      const scene = new Scene();
+      const renderer = new Renderer(canvasRef.current, scene);
       await renderer.Initialize();
       renderer.render();
     };

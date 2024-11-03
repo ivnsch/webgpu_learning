@@ -1,5 +1,6 @@
 import raytracer_kernel from "./shaders/raytracer_kernel.wgsl";
 import screen_shader from "./shaders/screen_shader.wgsl";
+import { Scene } from "./scene";
 
 export class Renderer {
   canvas: HTMLCanvasElement;
@@ -14,6 +15,8 @@ export class Renderer {
   color_buffer: GPUTexture;
   color_buffer_view: GPUTextureView;
   sampler: GPUSampler;
+  sceneParameters: GPUBuffer;
+  sphereBuffer: GPUBuffer;
 
   // Pipeline objects
   ray_tracing_pipeline: GPUComputePipeline;
@@ -21,8 +24,12 @@ export class Renderer {
   screen_pipeline: GPURenderPipeline;
   screen_bind_group: GPUBindGroup;
 
-  constructor(canvas: HTMLCanvasElement) {
+  // Scene to render
+  scene: Scene;
+
+  constructor(canvas: HTMLCanvasElement, scene: Scene) {
     this.canvas = canvas;
+    this.scene = scene;
   }
 
   async Initialize() {
@@ -43,7 +50,6 @@ export class Renderer {
     //Function calls are made through the device
     this.device = <GPUDevice>await this.adapter?.requestDevice();
     //context: similar to vulkan instance (or OpenGL context)
-    console.log("!! canvas: %o", this.canvas);
     this.context = <GPUCanvasContext>this.canvas.getContext("webgpu");
     this.format = "bgra8unorm";
     this.context.configure({
@@ -65,6 +71,21 @@ export class Renderer {
             viewDimension: "2d",
           },
         },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "uniform",
+          },
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "read-only-storage",
+            hasDynamicOffset: false,
+          },
+        },
       ],
     });
 
@@ -74,6 +95,18 @@ export class Renderer {
         {
           binding: 0,
           resource: this.color_buffer_view,
+        },
+        {
+          binding: 1,
+          resource: {
+            buffer: this.sceneParameters,
+          },
+        },
+        {
+          binding: 2,
+          resource: {
+            buffer: this.sphereBuffer,
+          },
         },
       ],
     });
@@ -178,9 +211,79 @@ export class Renderer {
       maxAnisotropy: 1,
     };
     this.sampler = this.device.createSampler(samplerDescriptor);
+
+    const parameterBufferDescriptor: GPUBufferDescriptor = {
+      size: 64,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    };
+    this.sceneParameters = this.device.createBuffer(parameterBufferDescriptor);
+
+    const sphereBufferDescriptor: GPUBufferDescriptor = {
+      size: 32 * this.scene.spheres.length,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    };
+    this.sphereBuffer = this.device.createBuffer(sphereBufferDescriptor);
+  }
+
+  prepareScene() {
+    const sceneData = {
+      cameraPos: this.scene.camera.position,
+      cameraForwards: this.scene.camera.forwards,
+      cameraRight: this.scene.camera.right,
+      cameraUp: this.scene.camera.up,
+      sphereCount: this.scene.spheres.length,
+    };
+    this.device.queue.writeBuffer(
+      this.sceneParameters,
+      0,
+      new Float32Array([
+        sceneData.cameraPos[0],
+        sceneData.cameraPos[1],
+        sceneData.cameraPos[2],
+        0.0,
+        sceneData.cameraForwards[0],
+        sceneData.cameraForwards[1],
+        sceneData.cameraForwards[2],
+        0.0,
+        sceneData.cameraRight[0],
+        sceneData.cameraRight[1],
+        sceneData.cameraRight[2],
+        0.0,
+        sceneData.cameraUp[0],
+        sceneData.cameraUp[1],
+        sceneData.cameraUp[2],
+        sceneData.sphereCount,
+      ]),
+      0,
+      16
+    );
+
+    const sphereData: Float32Array = new Float32Array(
+      8 * this.scene.spheres.length
+    );
+    for (let i = 0; i < this.scene.spheres.length; i++) {
+      sphereData[8 * i] = this.scene.spheres[i].center[0];
+      sphereData[8 * i + 1] = this.scene.spheres[i].center[1];
+      sphereData[8 * i + 2] = this.scene.spheres[i].center[2];
+      sphereData[8 * i + 3] = 0.0;
+      sphereData[8 * i + 4] = this.scene.spheres[i].color[0];
+      sphereData[8 * i + 5] = this.scene.spheres[i].color[1];
+      sphereData[8 * i + 6] = this.scene.spheres[i].color[2];
+      sphereData[8 * i + 7] = this.scene.spheres[i].radius;
+    }
+
+    this.device.queue.writeBuffer(
+      this.sphereBuffer,
+      0,
+      sphereData,
+      0,
+      8 * this.scene.spheres.length
+    );
   }
 
   render = () => {
+    this.prepareScene();
+
     const commandEncoder: GPUCommandEncoder =
       this.device.createCommandEncoder();
 
@@ -189,8 +292,8 @@ export class Renderer {
     ray_trace_pass.setPipeline(this.ray_tracing_pipeline);
     ray_trace_pass.setBindGroup(0, this.ray_tracing_bind_group);
     ray_trace_pass.dispatchWorkgroups(
-      Math.floor((this.canvas.width + 7) / 8),
-      Math.floor((this.canvas.height + 7) / 8),
+      Math.ceil(this.canvas.width / 8),
+      Math.ceil(this.canvas.height / 8),
       1
     );
     ray_trace_pass.end();
