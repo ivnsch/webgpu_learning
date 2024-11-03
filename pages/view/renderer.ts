@@ -18,6 +18,13 @@ export class Renderer {
   bindGroup: GPUBindGroup;
   pipeline: GPURenderPipeline;
 
+  // Depth stencil
+
+  depthStencilState: GPUDepthStencilState;
+  depthStencilBuffer: GPUTexture;
+  depthStencilView: GPUTextureView;
+  depthStencilAttachment: GPURenderPassDepthStencilAttachment;
+
   uniformBuffer2: GPUBuffer;
   t: number = 0.0;
 
@@ -35,6 +42,8 @@ export class Renderer {
     await this.setupDevice();
 
     await this.createAssets();
+
+    await this.makeDepthBufferResources();
 
     await this.makePipeline();
   }
@@ -54,6 +63,44 @@ export class Renderer {
       format: this.format,
       alphaMode: "opaque",
     });
+  }
+
+  async makeDepthBufferResources() {
+    this.depthStencilState = {
+      format: "depth24plus-stencil8",
+      depthWriteEnabled: true,
+      depthCompare: "less-equal",
+    };
+
+    const size: GPUExtent3D = {
+      width: this.canvas.width,
+      height: this.canvas.height,
+      depthOrArrayLayers: 1,
+    };
+
+    const depthBufferDescriptor: GPUTextureDescriptor = {
+      size: size,
+      format: "depth24plus-stencil8",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    };
+
+    this.depthStencilBuffer = this.device.createTexture(depthBufferDescriptor);
+
+    const viewDescriptor: GPUTextureViewDescriptor = {
+      format: "depth24plus-stencil8",
+      dimension: "2d",
+      aspect: "all",
+    };
+    this.depthStencilView = this.depthStencilBuffer.createView();
+
+    this.depthStencilAttachment = {
+      view: this.depthStencilView,
+      depthClearValue: 1.0,
+      depthLoadOp: "clear",
+      depthStoreOp: "store",
+      stencilLoadOp: "clear",
+      stencilStoreOp: "discard",
+    };
   }
 
   async makePipeline() {
@@ -142,6 +189,8 @@ export class Renderer {
         topology: "triangle-list",
       },
 
+      depthStencil: this.depthStencilState,
+
       layout: pipelineLayout,
     });
   }
@@ -204,6 +253,7 @@ export class Renderer {
           storeOp: "store",
         },
       ],
+      depthStencilAttachment: this.depthStencilAttachment,
     });
 
     renderpass.setPipeline(this.pipeline);
