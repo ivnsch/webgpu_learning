@@ -10,7 +10,8 @@ export default function Home() {
 
   useEffect(() => {
     const nested = async () => {
-      const scene = new Scene();
+      const sphereCount = 8192;
+      const scene = new Scene(sphereCount);
       const renderer = new Renderer(canvasRef.current, scene);
       await renderer.Initialize();
       renderer.render();

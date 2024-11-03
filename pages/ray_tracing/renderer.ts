@@ -17,6 +17,8 @@ export class Renderer {
   sampler: GPUSampler;
   sceneParameters: GPUBuffer;
   sphereBuffer: GPUBuffer;
+  nodeBuffer: GPUBuffer;
+  sphereIndexBuffer: GPUBuffer;
 
   // Pipeline objects
   ray_tracing_pipeline: GPUComputePipeline;
@@ -86,6 +88,22 @@ export class Renderer {
             hasDynamicOffset: false,
           },
         },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "read-only-storage",
+            hasDynamicOffset: false,
+          },
+        },
+        {
+          binding: 4,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "read-only-storage",
+            hasDynamicOffset: false,
+          },
+        },
       ],
     });
 
@@ -106,6 +124,18 @@ export class Renderer {
           binding: 2,
           resource: {
             buffer: this.sphereBuffer,
+          },
+        },
+        {
+          binding: 3,
+          resource: {
+            buffer: this.nodeBuffer,
+          },
+        },
+        {
+          binding: 4,
+          resource: {
+            buffer: this.sphereIndexBuffer,
           },
         },
       ],
@@ -219,10 +249,24 @@ export class Renderer {
     this.sceneParameters = this.device.createBuffer(parameterBufferDescriptor);
 
     const sphereBufferDescriptor: GPUBufferDescriptor = {
-      size: 32 * this.scene.spheres.length,
+      size: 32 * this.scene.sphereCount,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     };
     this.sphereBuffer = this.device.createBuffer(sphereBufferDescriptor);
+
+    const nodeBufferDescriptor: GPUBufferDescriptor = {
+      size: 32 * this.scene.nodesUsed,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    };
+    this.nodeBuffer = this.device.createBuffer(nodeBufferDescriptor);
+
+    const sphereIndexBufferDescriptor: GPUBufferDescriptor = {
+      size: 4 * this.scene.sphereCount,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    };
+    this.sphereIndexBuffer = this.device.createBuffer(
+      sphereIndexBufferDescriptor
+    );
   }
 
   prepareScene() {
@@ -231,7 +275,7 @@ export class Renderer {
       cameraForwards: this.scene.camera.forwards,
       cameraRight: this.scene.camera.right,
       cameraUp: this.scene.camera.up,
-      sphereCount: this.scene.spheres.length,
+      sphereCount: this.scene.sphereCount,
     };
     this.device.queue.writeBuffer(
       this.sceneParameters,
@@ -259,9 +303,9 @@ export class Renderer {
     );
 
     const sphereData: Float32Array = new Float32Array(
-      8 * this.scene.spheres.length
+      8 * this.scene.sphereCount
     );
-    for (let i = 0; i < this.scene.spheres.length; i++) {
+    for (let i = 0; i < this.scene.sphereCount; i++) {
       sphereData[8 * i] = this.scene.spheres[i].center[0];
       sphereData[8 * i + 1] = this.scene.spheres[i].center[1];
       sphereData[8 * i + 2] = this.scene.spheres[i].center[2];
@@ -271,17 +315,51 @@ export class Renderer {
       sphereData[8 * i + 6] = this.scene.spheres[i].color[2];
       sphereData[8 * i + 7] = this.scene.spheres[i].radius;
     }
-
     this.device.queue.writeBuffer(
       this.sphereBuffer,
       0,
       sphereData,
       0,
-      8 * this.scene.spheres.length
+      8 * this.scene.sphereCount
+    );
+
+    const nodeData: Float32Array = new Float32Array(8 * this.scene.nodesUsed);
+    for (let i = 0; i < this.scene.nodesUsed; i++) {
+      nodeData[8 * i] = this.scene.nodes[i].minCorner[0];
+      nodeData[8 * i + 1] = this.scene.nodes[i].minCorner[1];
+      nodeData[8 * i + 2] = this.scene.nodes[i].minCorner[2];
+      nodeData[8 * i + 3] = this.scene.nodes[i].leftChild;
+      nodeData[8 * i + 4] = this.scene.nodes[i].maxCorner[0];
+      nodeData[8 * i + 5] = this.scene.nodes[i].maxCorner[1];
+      nodeData[8 * i + 6] = this.scene.nodes[i].maxCorner[2];
+      nodeData[8 * i + 7] = this.scene.nodes[i].sphereCount;
+    }
+    this.device.queue.writeBuffer(
+      this.nodeBuffer,
+      0,
+      nodeData,
+      0,
+      8 * this.scene.nodesUsed
+    );
+
+    const sphereIndexData: Float32Array = new Float32Array(
+      this.scene.sphereCount
+    );
+    for (let i = 0; i < this.scene.sphereCount; i++) {
+      sphereIndexData[i] = this.scene.sphereIndices[i];
+    }
+    this.device.queue.writeBuffer(
+      this.sphereIndexBuffer,
+      0,
+      sphereIndexData,
+      0,
+      this.scene.sphereCount
     );
   }
 
   render = () => {
+    let start: number = performance.now();
+
     this.prepareScene();
 
     const commandEncoder: GPUCommandEncoder =
@@ -291,11 +369,7 @@ export class Renderer {
       commandEncoder.beginComputePass();
     ray_trace_pass.setPipeline(this.ray_tracing_pipeline);
     ray_trace_pass.setBindGroup(0, this.ray_tracing_bind_group);
-    ray_trace_pass.dispatchWorkgroups(
-      Math.ceil(this.canvas.width / 8),
-      Math.ceil(this.canvas.height / 8),
-      1
-    );
+    ray_trace_pass.dispatchWorkgroups(this.canvas.width, this.canvas.height, 1);
     ray_trace_pass.end();
 
     const textureView: GPUTextureView = this.context
@@ -319,6 +393,16 @@ export class Renderer {
     renderpass.end();
 
     this.device.queue.submit([commandEncoder.finish()]);
+
+    this.device.queue.onSubmittedWorkDone().then(() => {
+      let end: number = performance.now();
+      let performanceLabel: HTMLElement = <HTMLElement>(
+        document.getElementById("render-time")
+      );
+      if (performanceLabel) {
+        performanceLabel.innerText = (end - start).toString();
+      }
+    });
 
     requestAnimationFrame(this.render);
   };
