@@ -19,12 +19,16 @@ export class Renderer {
   bindGroup: GPUBindGroup;
   pipeline: GPURenderPipeline;
 
+  uniformBuffer2: GPUBuffer;
+  t: number = 0.0;
+
   // Assets
   triangleMesh: TriangleMesh;
   material: Material;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
+    this.t = 0.0;
   }
 
   async Initialize() {
@@ -57,6 +61,10 @@ export class Renderer {
       size: 64 * 3,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+    this.uniformBuffer2 = this.device.createBuffer({
+      size: 4, // one f32
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
 
     const bindGroupLayout = this.device.createBindGroupLayout({
       entries: [
@@ -74,6 +82,11 @@ export class Renderer {
           binding: 2,
           visibility: GPUShaderStage.FRAGMENT,
           sampler: {},
+        },
+        {
+          binding: 3,
+          visibility: GPUShaderStage.FRAGMENT,
+          buffer: {},
         },
       ],
     });
@@ -94,6 +107,12 @@ export class Renderer {
         {
           binding: 2,
           resource: this.material.sampler,
+        },
+        {
+          binding: 3,
+          resource: {
+            buffer: this.uniformBuffer2,
+          },
         },
       ],
     });
@@ -139,6 +158,11 @@ export class Renderer {
   }
 
   async render(camera: Camera, triangles: Triangle[]) {
+    this.t += 0.001;
+    if (this.t > 2.0 * Math.PI) {
+      this.t -= 2.0 * Math.PI;
+    }
+
     //make transforms
     const projection = mat4.create();
     mat4.perspective(projection, Math.PI / 4, 800 / 600, 0.1, 10);
@@ -151,6 +175,11 @@ export class Renderer {
       128,
       <ArrayBuffer>projection
     );
+
+    const arrayBuffer = new ArrayBuffer(4);
+    const floatArray = new Float32Array(arrayBuffer);
+    floatArray[0] = this.t;
+    this.device.queue.writeBuffer(this.uniformBuffer2, 0, arrayBuffer);
 
     //command encoder: records draw commands for submission
     const commandEncoder: GPUCommandEncoder =

@@ -6,6 +6,7 @@ struct TransformData {
 @binding(0) @group(0) var<uniform> transformUBO: TransformData;
 @binding(1) @group(0) var myTexture: texture_2d<f32>;
 @binding(2) @group(0) var mySampler: sampler;
+@binding(3) @group(0) var<uniform> time: f32;
 
 struct Fragment {
     @builtin(position) Position : vec4<f32>,
@@ -24,5 +25,6 @@ fn vs_main(@location(0) vertexPostion: vec3<f32>, @location(1) vertexTexCoord: v
 
 @fragment
 fn fs_main(@location(0) TexCoord : vec2<f32>) -> @location(0) vec4<f32> {
-    return textureSample(myTexture, mySampler, TexCoord);
+    return vec4<f32>(abs(sin(time)), 0.0, 0.0, 1.0);
+    // return textureSample(myTexture, mySampler, TexCoord);
 }
