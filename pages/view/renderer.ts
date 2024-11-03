@@ -24,6 +24,8 @@ export class Renderer {
   // Assets
   triangleMesh: TriangleMesh;
 
+  objectBuffer: GPUBuffer;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.t = 0.0;
@@ -56,7 +58,7 @@ export class Renderer {
 
   async makePipeline() {
     this.uniformBuffer = this.device.createBuffer({
-      size: 64 * 3,
+      size: 64 * 2,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     this.uniformBuffer2 = this.device.createBuffer({
@@ -76,6 +78,14 @@ export class Renderer {
           visibility: GPUShaderStage.FRAGMENT,
           buffer: {},
         },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: {
+            type: "read-only-storage",
+            hasDynamicOffset: false,
+          },
+        },
       ],
     });
 
@@ -92,6 +102,12 @@ export class Renderer {
           binding: 1,
           resource: {
             buffer: this.uniformBuffer2,
+          },
+        },
+        {
+          binding: 2,
+          resource: {
+            buffer: this.objectBuffer,
           },
         },
       ],
@@ -132,9 +148,15 @@ export class Renderer {
 
   async createAssets() {
     this.triangleMesh = new TriangleMesh(this.device);
+
+    const modelBufferDescriptor: GPUBufferDescriptor = {
+      size: 64 * 1024,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    };
+    this.objectBuffer = this.device.createBuffer(modelBufferDescriptor);
   }
 
-  async render(camera: Camera, triangles: Triangle[]) {
+  async render(camera: Camera, triangles: Float32Array, triangleCount: number) {
     this.t += 0.001;
     if (this.t > 2.0 * Math.PI) {
       this.t -= 2.0 * Math.PI;
@@ -146,10 +168,17 @@ export class Renderer {
 
     const view = camera.get_view();
 
-    this.device.queue.writeBuffer(this.uniformBuffer, 64, <ArrayBuffer>view);
+    this.device.queue.writeBuffer(
+      this.objectBuffer,
+      0,
+      triangles,
+      0,
+      triangles.length
+    );
+    this.device.queue.writeBuffer(this.uniformBuffer, 0, <ArrayBuffer>view);
     this.device.queue.writeBuffer(
       this.uniformBuffer,
-      128,
+      64,
       <ArrayBuffer>projection
     );
 
@@ -179,13 +208,8 @@ export class Renderer {
 
     renderpass.setPipeline(this.pipeline);
     renderpass.setVertexBuffer(0, this.triangleMesh.buffer);
-    triangles.forEach((triangle) => {
-      const model = triangle.get_model();
-
-      this.device.queue.writeBuffer(this.uniformBuffer, 0, <ArrayBuffer>model);
-      renderpass.setBindGroup(0, this.bindGroup);
-      renderpass.draw(3, 1, 0, 0);
-    });
+    renderpass.setBindGroup(0, this.bindGroup);
+    renderpass.draw(3, triangleCount, 0, 0);
     renderpass.end();
 
     this.device.queue.submit([commandEncoder.finish()]);
