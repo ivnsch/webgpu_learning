@@ -1,7 +1,6 @@
 import shader from "./shaders/shaders.wgsl";
 import { TriangleMesh } from "./triangle_mesh";
 import { mat4 } from "gl-matrix";
-import { Material } from "./material";
 import { Camera } from "../model/camera";
 import { Triangle } from "../model/triangle";
 
@@ -24,7 +23,6 @@ export class Renderer {
 
   // Assets
   triangleMesh: TriangleMesh;
-  material: Material;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -76,16 +74,6 @@ export class Renderer {
         {
           binding: 1,
           visibility: GPUShaderStage.FRAGMENT,
-          texture: {},
-        },
-        {
-          binding: 2,
-          visibility: GPUShaderStage.FRAGMENT,
-          sampler: {},
-        },
-        {
-          binding: 3,
-          visibility: GPUShaderStage.FRAGMENT,
           buffer: {},
         },
       ],
@@ -102,14 +90,6 @@ export class Renderer {
         },
         {
           binding: 1,
-          resource: this.material.view,
-        },
-        {
-          binding: 2,
-          resource: this.material.sampler,
-        },
-        {
-          binding: 3,
           resource: {
             buffer: this.uniformBuffer2,
           },
@@ -152,9 +132,6 @@ export class Renderer {
 
   async createAssets() {
     this.triangleMesh = new TriangleMesh(this.device);
-    this.material = new Material();
-
-    await this.material.initialize(this.device, "/chat.jpg");
   }
 
   async render(camera: Camera, triangles: Triangle[]) {
